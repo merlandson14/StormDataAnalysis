@@ -6,3 +6,6 @@ This is a very basic analysis of NOAA’s National Weather Service Storm Data fo
 
 ## Methodology:
 Reading through NOAA's documentation gives us a feel for the variables and storm types. For public health we are looking at `Fatalities` and `Injuries` and for economic impact we are looking at `PropDMG` and `CropDMG` with their associated exponential fields. We converted the exponential characters `K` and `M` to 1000 and 1000000, respectively, and then multipied them with the damage field to get actual values. Next we summarized the data values we wanted. Then we plotted the two sets, one for public health and one for economic loss. Finally, we gave our results, which ended up being `Tornado` in both cases.
+
+Look through the Rmd, html, and plots in the repository, but the write-up can also be found here:
+http://rpubs.com/merlandson/storm_data_analysis
