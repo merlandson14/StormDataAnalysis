@@ -1,0 +1,151 @@
+---
+title: "Storm Data Analysis"
+author: "M Erlandson"
+date: "March 13, 2016"
+output: html_document
+---
+
+# Title: Storm Data Analysis: Its Effects on Public Health and Economics
+
+## Synopsis:
+
+This is a very basic analysis of NOAA's National Weather Service Storm Data for dates 1950 to November 2011. We are interested in looking at the effects of storms on population health and economic impact. We wish to examine which storm event causes the most fatalies and injuries and which storm types inflict the most property and crop damages, thereby allowing government agencies, first responder groups, insurance adjusters, and the like, to see where personnel and funds are needed most.
+
+## System Info:
+
+Data is taken from NOAA's website: https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2 
+Documentation about the data collected can be read here:
+https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf
+And a PDF concerning storm FAQs can be read here:
+https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2FNCDC%20Storm%20Events-FAQ%20Page.pdf
+
+Data first collected on March 13, 2016 for this analysis.
+Using R version 3.2.2
+RStudio version 0.99.473
+Windows 10.0.10586 Build 10586
+Dell laptop Inspiron 5537 with Intel Core i5-4200U
+
+## Data Processing:
+
+First, the data is downloaded from the website and read into R. It is a csv zipped file, which the read.csv() function will automatically unzip and extract the data.
+
+```{r, cache=TRUE}
+zipfileUrl = "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+temp <- tempfile()                              # set up of temp storage
+download.file(zipfileUrl, temp)                 # download and save to temp
+stormData <- read.csv(temp)                     # read in zip file directly as df
+str(stormData)
+```
+
+An initial read of the data gives 902,297 observations with 37 variables. As you can see from the str() above, many of the state, county, date and times were read as factor variables. We may need to reformat those later. There are NAs and blanks in the data as well that may need to be addressed.
+
+```{r}
+head(stormData)
+```
+
+The first rows show us that the first state is Alabama (probably in alphabetical order), that the data is ordered by date of the storm event, that the first two entries are the only ones from 1950, that these older events were all tornadoes, and that many of the fields are blank. Of course, that could change for other dates and states.
+
+```{r}
+rlist <- c(100, 200, 300, 400, 500, 600, 700, 800, 900, 1000)
+stormData[rlist,1:8]
+```
+
+A look at the first ten 100s (and first eight variables) shows us that the first 500 entries deal with all of the data from 1950 to 1965 for Alabama, and after that more accurate and inclusive records began to show up. The sparcity of data from these earlier years may bias some of the overall information about fatalities and such and may need to be removed from the dataset or at least taken into account. But for now, we'll leave them in.
+
+Reading through the documentation, storm data includes a variety of conditions, including but not limited to: blizzards, dense fog, floods, hurricanes, lightning, sleet, tornados, hail, and even wildfires. These are listed in the EVTYPE variable, currently a factor with 985 levels (we may need to regroup those). 
+
+For our analysis on public health, we will need the variables for Fatalities and Injuries. It is unclear whether these numbers are for direct events only (such as a tree falling on a car due to high winds in a hurricane), or if they include the indirect ones (such as someone swirving to avoid the tree and ending up in a ditch the day after the storm), both of which are mentioned in the documentation as possibilities but are not separate variables in the dataframe. We will have to assume it doesn't matter that there's a difference.
+
+For our analysis on economic impact, we will need the variables for Property Damage and Crop Damage. According to the documentation, these are just best guestimates on overall amounts of damage. Data was entered from various sources, so the accuracy is only as good as the person entering it (like an insurance adjuster or police officer who is rounding their numbers). There are two variables for each: the number value and the exponent qualifier by which to multiply the number value, using K for 1,000 and M for 1,000,000. Blanks are handled as 1 in the exponent field.
+
+Below is the transformation of the dataframe to a smaller form for our purposes. We will need the dplyr package for selection and creating new variables.
+
+```{r select}
+library(dplyr)
+stormData <- select(stormData, STATE, EVTYPE, FATALITIES, INJURIES, PROPDMG, PROPDMGEXP, CROPDMG, CROPDMGEXP)     # select out necessary columns
+stormData$PROPDMGEXP <- as.character(stormData$PROPDMGEXP)   # came in as factor
+stormData$CROPDMGEXP <- as.character(stormData$CROPDMGEXP)   # forcing into char strings
+```
+```{r exponentloop}
+for (i in 1:nrow(stormData)){
+    stormData$PROPDMGEXP[i] <- 
+        if(stormData$PROPDMGEXP[i]=="K") {1000} 
+        else if(stormData$PROPDMGEXP[i]=="M") {1000000} 
+        else {1}
+    stormData$CROPDMGEXP[i] <- 
+        if(stormData$CROPDMGEXP[i]=="K") {1000} 
+        else if(stormData$CROPDMGEXP[i]=="M") {1000000} 
+        else {1}
+}                                         # setting EXP columns to 1, 1000, or 1000000
+```
+```{r fullvalues}
+stormData <- mutate(stormData, PROPDMGFULL = PROPDMG * as.numeric(PROPDMGEXP))
+stormData <- mutate(stormData, CROPDMGFULL = CROPDMG * as.numeric(CROPDMGEXP))
+```
+
+It was also noted in the documentation that fatalities, injuries, and damages from tropical cyclones were only recorded for wind-caused events. Tornadoes and flooding were included in their own categories. This can cause a bias in the analysis, favoring tornados and flooding over the hurricanes that might have brought them.
+
+## Storm Analysis:
+
+We need to look at Evtype and determine how to break apart or group the 985 different events, if at all. Since we are concerned with those storms that are the most damaging, we may be able to limit our dataset to just the top 50 or 100 or so. 
+
+```{r summary}
+stormDatasum <- summarise(group_by(stormData, EVTYPE), FATALITIES = sum(FATALITIES), INJURIES = sum(INJURIES), PROPDMG = sum(PROPDMGFULL), CROPDMG = sum(CROPDMGFULL))
+max(stormDatasum$FATALITIES)
+max(stormDatasum$INJURIES)
+max(stormDatasum$PROPDMG)
+max(stormDatasum$CROPDMG)
+```
+
+Now, we have a full summary in a dataframe of 985 storm types, summed over for fatalities, injuries, property and crop damages. According to the max values above, we may be able to limit our analysis to the largest events.
+
+We first take the data and filter it on highest number of fatalities or injuries and select just that into a dataset. We then reformat it to a long version so we can use HARMTYPE as a factor for plotting. We'll need the tidyr and ggplot2 packages for the next part.
+
+```{r people_damage}
+stormDatasumPeople <- filter(stormDatasum, FATALITIES > 100 | INJURIES > 10000)
+stormDatasumPeople <- select(stormDatasumPeople, EVTYPE, FATALITIES, INJURIES)
+library(tidyr)
+stormPeople <- gather(stormDatasumPeople, key = HARMTYPE, value = NUMOFPERSONS, FATALITIES, INJURIES)
+```
+```{r plot_people}
+library(ggplot2)
+a <- ggplot(stormPeople, aes(EVTYPE, NUMOFPERSONS, color = HARMTYPE))
+a + geom_point() + coord_cartesian(ylim = c(0,6000)) + theme_bw() + theme(axis.text.x=element_text(angle = 90)) + labs(title = "Storm Effect on Population Health") + labs(x = "Top 20 Storm Types") + labs(y = "Number of Persons")
+```
+
+It is interesting to note that Tornadoes have the greatest damage on people, both as fatalities and injuries, so much so that its value for Injuries is off the chart, the 91,346 persons reported earlier as the max.
+
+Now, we will do the same thing with the property and crop damages, filtering the monetary losses to greater than $100 million dollars and reformatting to the tall version. We also need to combine the moneys together for full cost in USDollars, and we will divide that by $1,000,000,000 (one billion) since the numbers are getting large.
+
+```{r money_damage}
+stormDatasumMoney <- filter(stormDatasum, PROPDMG > 100000000 | CROPDMG > 100000000)
+stormDatasumMoney <- select(stormDatasumMoney, EVTYPE, PROPDMG, CROPDMG)
+stormDatasumMoney <- mutate(stormDatasumMoney, TOTALDMG = PROPDMG + CROPDMG)
+stormMoney <- gather(stormDatasumMoney, key = HARMTYPE, value = MONEY, PROPDMG, CROPDMG, TOTALDMG)
+```
+```{r plot_money}
+stormMoney$MONEY <- stormMoney$MONEY / 1000000000            # divide by 1 billion dollars
+b <- ggplot(stormMoney, aes(EVTYPE, MONEY, color = HARMTYPE))
+b + geom_point() + facet_grid(HARMTYPE~.)+ theme_bw() + theme(axis.text.x=element_text(angle = 90)) + labs(title = "Storm Effect on Economics") + labs(x = "Top 48 Storm Types") + labs(y = "Monetary Losses in Billions of USD")
+```
+
+You can see by this second plot that the top 48 storm types differ on monetary damages, though most fall under $10 Billion USD. Some crop damages were reported as zero dollars but their corresponding property damage was great, so it appears that reporting was not consistent from record to record. This was part of the reason for having a full monetary damage variable to see accurate results.
+
+## Results:
+
+We can take the long dataframes and give the storm types that have had the most effect.
+
+```{r effects}
+stormPeople[which.max(stormPeople$NUMOFPERSONS),1:3]
+stormMoney[which.max(stormMoney$MONEY),1:3]
+```
+
+As you can see from our plots and the max numbers displayed, the storm type with the most impact on population health and economics is Tornado. With its sudden and extreme high winds, it's not surprising that these violent storms cause the most distruction.
+
+It is interesting that hurricanes did not make the ultimate list, but again that could be from dividing the hurricane damage into subsequent parts: high winds, rain, flooding, tornadoes, and other pieces. And although hurricanes bring tremendous damage, especially to the Gulf Coast region, they are few and far between compared to the frequency of tornadoes all over the United States.
+
+A further study of the data can be made with respect to each state. States that do not see much tornado activity will have different numbers with which to work. Government regulations, insurance reports, and preparadeness plans could be impacted by each state's individual storm results. 
+
+But overall, tornadoes are a danger to everyone, along with several of the other higher impacting storms such as flooding and high winds.
+
+M Erlandson
